@@ -1,0 +1,224 @@
+# =============================================================================
+# show_drone.params
+# PX4 parameter overrides optimised for drone show operations.
+#
+# Apply with:
+#   param load show_drone.params       (from PX4 shell / MAVLink)
+#   param save
+#
+# Format: PARAM_NAME VALUE
+# All values are floats unless otherwise noted.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ATTITUDE CONTROLLER — aggressive response for tight choreography
+# -----------------------------------------------------------------------------
+
+# Maximum roll/pitch rate (deg/s).  Stock: 220.  Show: 300 for snappy turns.
+MC_ROLLRATE_MAX 300.0
+MC_PITCHRATE_MAX 300.0
+
+# Maximum yaw rate (deg/s).  Show drones need to spin quickly for effects.
+MC_YAWRATE_MAX 720.0
+
+# Roll/pitch rate PID — increase I and D for stiffer attitude hold
+MC_ROLLRATE_P 0.15
+MC_ROLLRATE_I 0.20
+MC_ROLLRATE_D 0.005
+MC_PITCHRATE_P 0.15
+MC_PITCHRATE_I 0.20
+MC_PITCHRATE_D 0.005
+
+# Yaw rate PID
+MC_YAWRATE_P 0.20
+MC_YAWRATE_I 0.10
+MC_YAWRATE_D 0.000
+
+# Maximum tilt angle (deg) — allow aggressive leaning up to 45°
+MPC_TILTMAX_AIR 45.0
+MPC_TILTMAX_LND 12.0
+
+# -----------------------------------------------------------------------------
+# POSITION CONTROLLER — tight tracking for formation flying
+# -----------------------------------------------------------------------------
+
+# Horizontal position P gain (higher = snappier tracking)
+MPC_XY_P 1.20
+
+# Horizontal velocity P and I gains
+MPC_XY_VEL_P_ACC 3.00
+MPC_XY_VEL_I_ACC 0.40
+MPC_XY_VEL_D_ACC 0.20
+
+# Vertical (Z) position P gain
+MPC_Z_P 1.20
+
+# Vertical velocity P, I, D
+MPC_Z_VEL_P_ACC 6.00
+MPC_Z_VEL_I_ACC 2.00
+MPC_Z_VEL_D_ACC 0.00
+
+# Maximum horizontal velocity (m/s)
+MPC_XY_VEL_MAX 8.0
+
+# Maximum vertical velocity — up/down
+MPC_Z_VEL_MAX_UP 4.0
+MPC_Z_VEL_MAX_DN 3.0
+
+# Maximum horizontal acceleration (m/s²)
+MPC_ACC_HOR_MAX 8.0
+MPC_ACC_HOR     5.0
+
+# Maximum deceleration
+MPC_DEC_HOR_SLOW 5.0
+
+# Jerk limit (m/s³) — important for smooth light trails
+MPC_JERK_MAX 10.0
+MPC_JERK_AUTO 8.0
+
+# Takeoff and landing speeds
+MPC_TKO_SPEED 2.0
+MPC_LAND_SPEED 1.5
+
+# Minimum takeoff altitude (m)
+MPC_MANTHR_MIN 0.08
+
+# -----------------------------------------------------------------------------
+# GPS / RTK — strict accuracy requirements for show safety
+# -----------------------------------------------------------------------------
+
+# Require RTK fix before arming (1 = required)
+# Note: EKF2_GPS_CTRL bit 3 enables GPS yaw; bit 0 pos, bit 1 vel, bit 2 hgt
+EKF2_GPS_CTRL 15
+
+# GPS accuracy thresholds
+# HACC — horizontal accuracy (m); reject GPS input above this
+EKF2_REQ_HACC 0.5
+
+# VACC — vertical accuracy (m)
+EKF2_REQ_VACC 0.8
+
+# Speed accuracy (m/s)
+EKF2_REQ_SACC 0.5
+
+# Minimum satellites for GPS acceptance
+EKF2_REQ_NSATS 8
+
+# GPS position noise (m) — lower = trust GPS more
+EKF2_GPS_POS_NOISE 0.1
+
+# Velocity noise (m/s)
+EKF2_GPS_VEL_NOISE 0.05
+
+# RTK timeout — fail GPS if no fix within 30 s
+COM_ARM_WO_GPS 0
+
+# -----------------------------------------------------------------------------
+# FAILSAFE SETTINGS — show-specific responses
+# -----------------------------------------------------------------------------
+
+# RC loss failsafe action: 3 = RTL (Return-to-Launch)
+NAV_RCL_ACT 3
+
+# Data link loss (offboard) failsafe: 3 = Land immediately
+NAV_DLL_ACT 0
+
+# Low battery failsafe:
+#   0 = warning only, 1 = land, 2 = RTL, 3 = terminate
+COM_LOW_BAT_ACT 2
+
+# Battery threshold for failsafe trigger (%)
+BAT_CRIT_THR 0.15
+BAT_EMERGEN_THR 0.07
+
+# Geofence breach action: 2 = Hold position at fence boundary, 3 = RTL
+GF_ACTION 3
+
+# Geofence altitude limit (m above home) — must match sim GEOFENCE_MAX_ALT
+GF_MAX_HOR_DIST 500.0
+GF_MAX_VER_DIST 120.0
+
+# Collision prevention — distance at which avoidance kicks in (m)
+CP_DIST 2.0
+CP_DELAY 0.2
+
+# -----------------------------------------------------------------------------
+# OFFBOARD / COMPANION COMPUTER CONTROL
+# -----------------------------------------------------------------------------
+
+# Offboard signal timeout before failsafe (ms)
+COM_OF_LOSS_T 500
+
+# Allow offboard arming from companion computer
+COM_RCIN_MODE 1
+
+# Enable setpoint slew rate limiting in offboard (smooths commanded jumps)
+MPC_YAWRAUTO_MAX 120.0
+
+# -----------------------------------------------------------------------------
+# LED / AUX OUTPUT
+# -----------------------------------------------------------------------------
+
+# Map AUX1 to RGB LED driver
+# PWM_MAIN_FUNC5 3     # 3 = RCIN passthrough — set per airframe
+
+# LED blink on arm
+CBRK_IO_SAFETY 22027
+
+# -----------------------------------------------------------------------------
+# LOGGING — capture full show telemetry
+# -----------------------------------------------------------------------------
+
+# Log from arming to disarming at full rate
+SDLOG_MODE 1
+
+# Log all topics at max rate during show
+SDLOG_PROFILE 263
+
+# Keep last 50 sessions
+SDLOG_DIRS_MAX 50
+
+# -----------------------------------------------------------------------------
+# ESTIMATOR
+# -----------------------------------------------------------------------------
+
+# Use EKF2 as primary estimator
+SYS_MC_EST_GROUP 2
+
+# Accelerometer bias learning — disable during show to prevent drift
+EKF2_ABL_ACCLIM 25.0
+
+# Gyro bias learning limit
+EKF2_GYR_B_NOISE 1.0e-3
+
+# Baro vs GPS height blending — prefer GPS for show accuracy
+EKF2_HGT_REF 1
+
+# -----------------------------------------------------------------------------
+# MIXER / MOTOR OUTPUT
+# -----------------------------------------------------------------------------
+
+# Minimum motor output (prevents motor stop during show)
+PWM_MIN 1100
+PWM_MAX 1900
+PWM_RATE 400
+
+# Motor spin-up rate
+MOT_SPIN_ARMED 0.10
+MOT_SPIN_MIN   0.12
+
+# -----------------------------------------------------------------------------
+# ARMING CONDITIONS — enforce strict pre-show checks
+# -----------------------------------------------------------------------------
+
+# Require home position before arming
+COM_ARM_WO_GPS 0
+
+# Require valid setpoint before arming in offboard mode
+COM_ARM_CHK_ESCS 1
+
+# Accelerometer calibration required
+CBRK_ACCEL_CAL 0
+
+# Force arm-switch confirmation (prevents accidental arming)
+COM_ARM_AUTH_REQ 0

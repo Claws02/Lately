@@ -1,0 +1,241 @@
+<?xml version="1.0" ?>
+<!--
+  wind_gust.world
+  Extends empty_night.world with a 15 m/s crosswind gust and
+  turbulence via the GazeboRosWind plugin (or the built-in Gazebo
+  WindPlugin for gz-sim 7+).
+
+  Wind configuration:
+    - Mean speed    : 15 m/s from the west (+X direction)
+    - Gust period   : 8 seconds
+    - Gust amplitude: 5 m/s peak-above-mean
+    - Turbulence    : Dryden model enabled, medium intensity
+
+  Plugin compatibility:
+    Gazebo Classic  : uses GazeboRosWind (ROS) or libLiftDragPlugin on each model
+    gz-sim Fortress : uses gz::sim::systems::WindEffects system plugin
+
+  This file includes both plugin styles; comment out whichever is not needed.
+-->
+<sdf version="1.6">
+  <world name="wind_gust">
+
+    <!-- ================================================================
+         Physics — same as empty_night.world
+         ================================================================ -->
+    <physics type="ode" name="default_physics">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+      <magnetic_field>6.0e-6 2.3e-5 -4.2e-5</magnetic_field>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>50</iters>
+          <sor>1.3</sor>
+          <use_dynamic_moi_rescaling>true</use_dynamic_moi_rescaling>
+        </solver>
+        <constraints>
+          <cfm>0.0</cfm>
+          <erp>0.2</erp>
+          <contact_max_correcting_vel>100.0</contact_max_correcting_vel>
+          <contact_surface_layer>0.001</contact_surface_layer>
+        </constraints>
+      </ode>
+    </physics>
+
+    <!-- ================================================================
+         Scene — identical night environment
+         ================================================================ -->
+    <scene>
+      <ambient>0.02 0.02 0.04 1.0</ambient>
+      <background>0.003 0.003 0.012 1.0</background>
+      <shadows>false</shadows>
+      <sky>
+        <time>22</time>
+        <sunrise>6</sunrise>
+        <sunset>20</sunset>
+        <wind_speed>15.0</wind_speed>     <!-- visual sky wind matches physics -->
+        <wind_direction>270.0</wind_direction>  <!-- from west -->
+        <clouds>
+          <speed>15.0</speed>
+          <direction>270.0</direction>
+          <humidity>0.3</humidity>
+          <mean_size>0.5</mean_size>
+          <ambient>0.02 0.02 0.03 1.0</ambient>
+        </clouds>
+      </sky>
+    </scene>
+
+    <!-- ================================================================
+         Lighting — identical to empty_night.world
+         ================================================================ -->
+    <light type="directional" name="moon_light">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 100 0 0 0</pose>
+      <diffuse>0.04 0.045 0.06 1.0</diffuse>
+      <specular>0.01 0.01 0.015 1.0</specular>
+      <attenuation>
+        <range>10000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.3 0.2 -0.9</direction>
+    </light>
+
+    <light type="directional" name="ground_bounce">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 0.1 0 0 0</pose>
+      <diffuse>0.01 0.01 0.01 1.0</diffuse>
+      <specular>0 0 0 1.0</specular>
+      <attenuation>
+        <range>500</range>
+        <constant>1.0</constant>
+        <linear>0.0</linear>
+        <quadratic>0.0</quadratic>
+      </attenuation>
+      <direction>0 0 1</direction>
+    </light>
+
+    <!-- ================================================================
+         Ground plane
+         ================================================================ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.8</mu>
+                <mu2>0.8</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.05 0.05 0.05 1.0</ambient>
+            <diffuse>0.08 0.08 0.08 1.0</diffuse>
+            <specular>0.01 0.01 0.01 1.0</specular>
+            <emissive>0 0 0 1.0</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================
+         WIND PLUGIN (Gazebo Classic — GazeboRosWind / libgazebo_wind_plugin)
+         ================================================================
+         This uses the rotors_simulator wind plugin interface.
+         Mean wind is +X direction (West→East) at 15 m/s.
+         Gust is modeled as a sinusoidal amplitude modulation.
+    -->
+    <plugin name="wind_plugin" filename="libgazebo_wind_plugin.so">
+      <!-- Wind frame: ENU — X=East, Y=North, Z=Up -->
+      <!-- 15 m/s from west = +X direction in ENU -->
+      <windVelocityMean>15.0</windVelocityMean>
+      <windVelocityMax>22.0</windVelocityMax>
+      <windVelocityVariance>3.0</windVelocityVariance>
+      <windDirectionMean>1 0 0</windDirectionMean>
+
+      <!-- Gust: 5 m/s peak added on 8-second cycle -->
+      <windGustStart>0</windGustStart>
+      <windGustDuration>4.0</windGustDuration>
+      <windGustVelocityMean>5.0</windGustVelocityMean>
+      <windGustVelocityMax>8.0</windGustVelocityMax>
+      <windGustVelocityVariance>1.5</windGustVelocityVariance>
+      <windGustDirectionMean>1 0 0</windGustDirectionMean>
+
+      <!-- Turbulence: correlated noise using Dryden-like parameters -->
+      <windTurbulenceEnable>true</windTurbulenceEnable>
+      <windTurbulenceIntensity>0.15</windTurbulenceIntensity>
+      <!-- Dryden length scale L_u for horizontal turbulence at 50m AGL -->
+      <windTurbulenceLengthX>200.0</windTurbulenceLengthX>
+      <windTurbulenceLengthY>200.0</windTurbulenceLengthY>
+      <windTurbulenceLengthZ>50.0</windTurbulenceLengthZ>
+
+      <!-- Publish to ROS topic (if ROS bridge is running) -->
+      <rosTopic>/drone_show/wind</rosTopic>
+      <publishRate>10.0</publishRate>
+    </plugin>
+
+    <!-- ================================================================
+         WIND PLUGIN (gz-sim 7+ / Ignition Fortress style)
+         Comment out the Classic plugin above and enable this block instead
+         when using the new gz-sim simulator.
+    ================================================================
+    <plugin filename="gz-sim-wind-effects-system"
+            name="gz::sim::systems::WindEffects">
+      <horizontal>
+        <magnitude>
+          <time_for_rise>10</time_for_rise>
+          <sin>
+            <amplitude_percent>0.05</amplitude_percent>
+            <period>60</period>
+          </sin>
+          <noise type="gaussian">
+            <mean>0</mean>
+            <stddev>0.0002</stddev>
+          </noise>
+        </magnitude>
+        <direction>
+          <initial_value>0</initial_value>
+          <sin>
+            <amplitude>5</amplitude>
+            <period>20</period>
+          </sin>
+          <noise type="gaussian">
+            <mean>0</mean>
+            <stddev>0.03</stddev>
+          </noise>
+        </direction>
+      </horizontal>
+      <vertical>
+        <noise type="gaussian">
+          <mean>0</mean>
+          <stddev>0.1</stddev>
+        </noise>
+      </vertical>
+      <force_approximation_scaling_factor>1</force_approximation_scaling_factor>
+    </plugin>
+    ================================================================ -->
+
+    <!-- ================================================================
+         GPS origin
+         ================================================================ -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>51.5074</latitude_deg>
+      <longitude_deg>-0.1278</longitude_deg>
+      <elevation>10.0</elevation>
+      <heading_deg>0.0</heading_deg>
+    </spherical_coordinates>
+
+    <!-- ================================================================
+         GUI
+         ================================================================ -->
+    <gui fullscreen="0">
+      <camera name="user_camera">
+        <pose>-80 -80 50 0 0.5 0.78</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
+  </world>
+</sdf>

@@ -1,0 +1,174 @@
+# ============================================================================
+# Dockerfile.ardupilot
+# ArduCopter SITL (Software-In-The-Loop) simulation container.
+#
+# Build:
+#   docker build -f Dockerfile.ardupilot -t ardupilot-sitl:latest .
+#
+# Run (headless, MAVLink on port 14550):
+#   docker run --rm -it \
+#       -p 14550:14550/udp \
+#       -p 14551:14551/udp \
+#       ardupilot-sitl:latest
+#
+# Run with Gazebo / SITL_headless:
+#   docker run --rm -it \
+#       -e DISPLAY=$DISPLAY \
+#       -v /tmp/.X11-unix:/tmp/.X11-unix \
+#       ardupilot-sitl:latest gazebo
+#
+# Notes:
+#  - MAVLink UDP output is on 127.0.0.1:14550 by default (map with -p).
+#  - Multiple instances: set SYSID_THISMAV via --param flag or env var.
+#  - ArduCopter version pinned to 4.4-stable for reproducibility.
+# ============================================================================
+
+FROM ubuntu:22.04
+
+LABEL maintainer="drone-show-sim"
+LABEL description="ArduCopter SITL for drone show simulation"
+LABEL ardupilot.version="4.4-stable"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# --------------------------------------------------------------------------
+# Create a non-root user for ArduPilot build (the build scripts require it)
+# --------------------------------------------------------------------------
+RUN useradd -m -s /bin/bash ardupilot \
+    && echo "ardupilot ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# --------------------------------------------------------------------------
+# Base system packages
+# --------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build essentials
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    unzip \
+    # Python
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-numpy \
+    # Simulation / visualisation
+    libsdl2-dev \
+    xterm \
+    # Networking
+    netcat-openbsd \
+    socat \
+    # Misc
+    lsb-release \
+    sudo \
+    tzdata \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------------
+# Python packages
+# --------------------------------------------------------------------------
+RUN pip3 install --no-cache-dir \
+    pymavlink \
+    mavsdk \
+    dronekit \
+    numpy \
+    pexpect \
+    future \
+    empy==3.3.4 \
+    packaging
+
+# --------------------------------------------------------------------------
+# Clone ArduPilot
+# --------------------------------------------------------------------------
+USER ardupilot
+WORKDIR /home/ardupilot
+
+RUN git clone --depth=1 --branch Copter-4.4 \
+    https://github.com/ArduPilot/ardupilot.git \
+    && cd ardupilot \
+    && git submodule update --init --recursive --depth=1
+
+WORKDIR /home/ardupilot/ardupilot
+
+# --------------------------------------------------------------------------
+# Run ArduPilot's install-prereqs script
+# --------------------------------------------------------------------------
+RUN USER=ardupilot Tools/environment_install/install-prereqs-ubuntu.sh -y 2>&1 | tail -30
+
+# --------------------------------------------------------------------------
+# Build ArduCopter SITL binary (waf build)
+# --------------------------------------------------------------------------
+RUN ./waf configure --board sitl \
+    && ./waf copter 2>&1 | tail -20
+
+# --------------------------------------------------------------------------
+# Copy show drone parameter overrides
+# --------------------------------------------------------------------------
+USER root
+COPY --chown=ardupilot:ardupilot params/show_drone.params \
+    /home/ardupilot/ardupilot/ArduCopter/show_drone.parm
+USER ardupilot
+
+# --------------------------------------------------------------------------
+# Pre-create SITL working directory
+# --------------------------------------------------------------------------
+RUN mkdir -p /home/ardupilot/sitl_run
+
+# --------------------------------------------------------------------------
+# Entrypoint script
+# --------------------------------------------------------------------------
+COPY --chown=ardupilot:ardupilot <<'ENTRYPOINT_EOF' /home/ardupilot/entrypoint.sh
+#!/bin/bash
+set -e
+
+SYSID=${SYSID_THISMAV:-1}
+LAT=${HOME_LAT:-51.5074}
+LON=${HOME_LON:--0.1278}
+ALT=${HOME_ALT:-0}
+HEADING=${HOME_HEADING:-0}
+TARGET=${1:-sitl}
+
+echo "==> ArduCopter SITL starting (SYSID=${SYSID}, lat=${LAT}, lon=${LON})"
+
+SITL_BIN=/home/ardupilot/ardupilot/build/sitl/bin/arducopter
+PARAMS_FILE=/home/ardupilot/ardupilot/ArduCopter/show_drone.parm
+
+cd /home/ardupilot/sitl_run
+
+if [ "$TARGET" = "none" ]; then
+    exec /bin/bash
+fi
+
+# Start SITL
+exec $SITL_BIN \
+    --model quad \
+    --home "${LAT},${LON},${ALT},${HEADING}" \
+    --sysid "${SYSID}" \
+    --speedup 1 \
+    --defaults "${PARAMS_FILE}" \
+    --sim-address 127.0.0.1 \
+    -I "${SYSID}" \
+    "$@"
+ENTRYPOINT_EOF
+
+RUN chmod +x /home/ardupilot/entrypoint.sh
+
+# --------------------------------------------------------------------------
+# Expose MAVLink ports
+# --------------------------------------------------------------------------
+EXPOSE 14550/udp
+EXPOSE 14551/udp
+# MAVProxy/telemetry relay
+EXPOSE 14552/udp
+
+# --------------------------------------------------------------------------
+# Healthcheck
+# --------------------------------------------------------------------------
+HEALTHCHECK --interval=15s --timeout=10s --start-period=90s --retries=3 \
+    CMD pgrep arducopter > /dev/null || exit 1
+
+ENTRYPOINT ["/home/ardupilot/entrypoint.sh"]
+CMD ["sitl"]

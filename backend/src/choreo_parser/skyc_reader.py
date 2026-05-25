@@ -76,6 +76,27 @@ class ShowFile:
     trajectories: list[DroneTrajectory] = field(default_factory=list)
     light_cues: list[LightCue] = field(default_factory=list)
 
+    def get_trajectories(self) -> list[dict[str, Any]]:
+        """
+        Return trajectories in the format expected by DroneSwarmSimulator.load_show():
+            list of {waypoints: [{t, x, y, z}, ...], lights: [{t, r, g, b}, ...]}
+        """
+        light_by_id: dict[int, LightCue] = {lc.drone_id: lc for lc in self.light_cues}
+        result: list[dict[str, Any]] = []
+        for traj in self.trajectories:
+            waypoints = [
+                {"t": wp.t, "x": wp.x, "y": wp.y, "z": wp.z}
+                for wp in traj.waypoints
+            ]
+            lc = light_by_id.get(traj.drone_id)
+            lights = (
+                [{"t": kf.t, "r": kf.r, "g": kf.g, "b": kf.b} for kf in lc.keyframes]
+                if lc
+                else [{"t": 0.0, "r": 255, "g": 255, "b": 255}]
+            )
+            result.append({"waypoints": waypoints, "lights": lights})
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Catmull-Rom spline helpers

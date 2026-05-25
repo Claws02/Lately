@@ -1,0 +1,160 @@
+# ============================================================================
+# Dockerfile.px4
+# PX4 Autopilot SITL (Software-In-The-Loop) simulation container.
+#
+# Build:
+#   docker build -f Dockerfile.px4 -t px4-sitl:latest .
+#
+# Run (headless jMAVSim, port 14550 UDP for MAVLink GCS, 14540 for MAVSDK):
+#   docker run --rm -it \
+#       -p 14550:14550/udp \
+#       -p 14540:14540/udp \
+#       -p 14580:14580/udp \
+#       px4-sitl:latest
+#
+# Run with Gazebo Classic (needs X11 or VNC):
+#   docker run --rm -it \
+#       -e DISPLAY=$DISPLAY \
+#       -v /tmp/.X11-unix:/tmp/.X11-unix \
+#       -p 14550:14550/udp \
+#       px4-sitl:latest gazebo
+# ============================================================================
+
+FROM ubuntu:22.04
+
+LABEL maintainer="drone-show-sim"
+LABEL description="PX4 Autopilot SITL for drone show simulation"
+LABEL px4.version="v1.14"
+
+# Avoid interactive prompts during apt installs
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# --------------------------------------------------------------------------
+# System dependencies
+# --------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build tools
+    build-essential \
+    cmake \
+    ninja-build \
+    git \
+    wget \
+    curl \
+    unzip \
+    # Python
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-numpy \
+    python3-empy \
+    # PX4 build dependencies
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    # Network / MAVLink
+    netcat-openbsd \
+    # Java (needed for jMAVSim)
+    default-jdk \
+    ant \
+    # Misc
+    lsb-release \
+    sudo \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------------
+# Python packages
+# --------------------------------------------------------------------------
+RUN pip3 install --no-cache-dir \
+    pyserial \
+    pymavlink \
+    mavsdk \
+    dronekit \
+    numpy \
+    toml \
+    packaging \
+    kconfiglib \
+    jinja2 \
+    future
+
+# --------------------------------------------------------------------------
+# Clone PX4-Autopilot
+# --------------------------------------------------------------------------
+WORKDIR /opt
+RUN git clone --depth=1 --branch v1.14.0 \
+    https://github.com/PX4/PX4-Autopilot.git \
+    && cd PX4-Autopilot \
+    && git submodule update --init --recursive --depth=1
+
+WORKDIR /opt/PX4-Autopilot
+
+# --------------------------------------------------------------------------
+# Run the PX4 ubuntu.sh dependency installer (handles remaining build deps)
+# --------------------------------------------------------------------------
+RUN bash Tools/setup/ubuntu.sh --no-nuttx --no-sim-tools 2>&1 | tail -20
+
+# --------------------------------------------------------------------------
+# Pre-build the SITL firmware (jMAVSim target) to cache layers
+# --------------------------------------------------------------------------
+RUN DONT_RUN=1 make px4_sitl_default jmavsim 2>&1 | tail -40
+
+# --------------------------------------------------------------------------
+# Copy show-drone parameter overrides
+# --------------------------------------------------------------------------
+COPY params/show_drone.params /opt/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/show_drone.params
+
+# --------------------------------------------------------------------------
+# Entrypoint script
+# Supports: jmavsim (default), gazebo, none (just shell)
+# --------------------------------------------------------------------------
+COPY <<'ENTRYPOINT_EOF' /entrypoint.sh
+#!/bin/bash
+set -e
+
+VEHICLE=${VEHICLE:-iris}
+TARGET=${1:-jmavsim}
+DRONE_ID=${DRONE_ID:-1}
+PX4_INSTANCE=${PX4_INSTANCE:-0}
+
+echo "==> PX4 SITL starting: vehicle=${VEHICLE}, target=${TARGET}, instance=${PX4_INSTANCE}"
+
+# Apply show-drone parameters at runtime via env
+export PX4_SIM_MODEL=${VEHICLE}
+export PX4_GZ_MODEL=${VEHICLE}
+export HEADLESS=1
+
+cd /opt/PX4-Autopilot
+
+if [ "$TARGET" = "none" ]; then
+    exec /bin/bash
+elif [ "$TARGET" = "gazebo" ]; then
+    exec make px4_sitl gazebo-classic_iris
+else
+    exec make px4_sitl_default jmavsim
+fi
+ENTRYPOINT_EOF
+
+RUN chmod +x /entrypoint.sh
+
+# --------------------------------------------------------------------------
+# Expose MAVLink ports
+# 14550 = GCS (QGroundControl / MissionPlanner)
+# 14540 = MAVSDK / offboard API
+# 14580 = additional MAVLink bridge
+# --------------------------------------------------------------------------
+EXPOSE 14550/udp
+EXPOSE 14540/udp
+EXPOSE 14580/udp
+
+# --------------------------------------------------------------------------
+# Healthcheck: verify jMAVSim UDP port opens within 60 s
+# --------------------------------------------------------------------------
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=3 \
+    CMD nc -zvu localhost 14550 || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["jmavsim"]
