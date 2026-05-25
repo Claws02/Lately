@@ -209,6 +209,11 @@ class SkycReader:
                 drone_id = self._extract_id(traj_name)
                 with zf.open(traj_name) as fh:
                     raw = json.load(fh)
+                # Support both flat list and wrapped {"waypoints": [...]} format
+                if isinstance(raw, dict):
+                    wp_list = raw.get("waypoints", [])
+                else:
+                    wp_list = raw
                 waypoints = [
                     Waypoint(
                         t=float(wp["t"]),
@@ -216,7 +221,7 @@ class SkycReader:
                         y=float(wp["y"]),
                         z=float(wp["z"]),
                     )
-                    for wp in raw
+                    for wp in wp_list
                 ]
                 show.trajectories.append(DroneTrajectory(drone_id=drone_id, waypoints=waypoints))
 
@@ -228,6 +233,11 @@ class SkycReader:
                 drone_id = self._extract_id(light_name)
                 with zf.open(light_name) as fh:
                     raw = json.load(fh)
+                # Support both flat list and wrapped {"keyframes": [...]} format
+                if isinstance(raw, dict):
+                    kf_list = raw.get("keyframes", [])
+                else:
+                    kf_list = raw
                 keyframes = [
                     ColorKeyframe(
                         t=float(kf["t"]),
@@ -235,7 +245,7 @@ class SkycReader:
                         g=int(kf["g"]),
                         b=int(kf["b"]),
                     )
-                    for kf in raw
+                    for kf in kf_list
                 ]
                 show.light_cues.append(LightCue(drone_id=drone_id, keyframes=keyframes))
 
