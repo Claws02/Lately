@@ -203,23 +203,25 @@ class TestGeofence:
     def test_safe_position(self):
         GE, GZ = self._get_engine()
         engine = GE()
-        zone = GZ(center_x=0, center_y=0, center_z=20, radius=50.0, min_alt=0, max_alt=60, zone_type="SAFE")
+        zone = GZ(zone_id=0, center_x=0, center_y=0, center_z=20, radius_m=50.0, min_alt=0, max_alt=60, zone_type="SAFE")
         engine.add_zone(zone)
         status = engine.check_drone(0, 0.0, 0.0, 20.0)
         assert "VIOLATION" not in str(status).upper()
 
     def test_violation_outside_radius(self):
+        # SAFE zone = drone must stay inside. Flying outside is a hard violation.
         GE, GZ = self._get_engine()
+        from src.fleet_manager.geofence import GeofenceStatus
         engine = GE()
-        zone = GZ(center_x=0, center_y=0, center_z=20, radius=10.0, min_alt=0, max_alt=60, zone_type="HARD")
+        zone = GZ(zone_id=0, center_x=0, center_y=0, center_z=20, radius_m=10.0, min_alt=0, max_alt=60, zone_type="SAFE")
         engine.add_zone(zone)
         status = engine.check_drone(0, 100.0, 100.0, 20.0)
-        assert "VIOLATION" in str(status).upper() or "HARD" in str(status).upper() or status != "SAFE"
+        assert status == GeofenceStatus.VIOLATION
 
     def test_vectorized_check(self):
         GE, GZ = self._get_engine()
         engine = GE()
-        zone = GZ(center_x=0, center_y=0, center_z=20, radius=30.0, min_alt=0, max_alt=60, zone_type="HARD")
+        zone = GZ(zone_id=0, center_x=0, center_y=0, center_z=20, radius_m=30.0, min_alt=0, max_alt=60, zone_type="HARD")
         engine.add_zone(zone)
         positions = np.array([
             [0.0, 0.0, 20.0],   # safe
@@ -245,11 +247,11 @@ class TestFlockwaveProtocol:
             vx=0.1, vy=-0.2, vz=0.0,
             roll=0.01, pitch=-0.01, yaw=1.5,
             r=255, g=128, b=0,
-            battery=87.5, status=DroneStatus.FLYING, rtk_fix=True
+            battery=0.875, status=DroneStatus.FLYING, rtk_fix=True
         )
         data = d.model_dump()
         assert data["id"] == 0
-        assert data["battery"] == pytest.approx(87.5, abs=0.1)
+        assert data["battery"] == pytest.approx(0.875, abs=0.01)
 
     def test_telemetry_broadcast_serializable(self):
         try:
@@ -262,11 +264,12 @@ class TestFlockwaveProtocol:
                       vx=0.0, vy=0.0, vz=0.0,
                       roll=0.0, pitch=0.0, yaw=0.0,
                       r=255, g=0, b=i * 5,
-                      battery=90.0, status=DroneStatus.FLYING, rtk_fix=True)
+                      battery=0.9, status=DroneStatus.FLYING, rtk_fix=True)
             for i in range(5)
         ]
         msg = make_telemetry(drones)
-        raw = json.dumps(msg)
+        # make_telemetry may return a Pydantic model or a plain dict
+        raw = json.dumps(msg.model_dump() if hasattr(msg, "model_dump") else msg)
         parsed = json.loads(raw)
         assert parsed["type"] == "TEL"
         assert len(parsed["drones"]) == 5

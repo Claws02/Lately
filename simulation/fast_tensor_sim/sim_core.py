@@ -147,6 +147,34 @@ ARMING_DELAY_S = 1.0
 
 
 # ---------------------------------------------------------------------------
+# Dict adapter — bridges generate_demo_show() raw dicts to ShowFile interface
+# ---------------------------------------------------------------------------
+
+class _DictShowFileAdapter:
+    """Wraps the dict returned by demo_generator.generate_demo_show() so that
+    DroneSwarmSimulator.load_show() can consume it without modification."""
+
+    def __init__(self, d: dict) -> None:
+        self._d = d
+        meta = d.get("metadata", {})
+        self.drone_count: int = int(meta.get("drone_count", len(d.get("trajectories", []))))
+        self.title: str = meta.get("title", "")
+        self.duration: float = float(meta.get("duration", 0.0))
+
+    def get_trajectories(self) -> list:
+        """Return list of {waypoints, lights} dicts the simulator expects."""
+        trajs = {t["drone_id"]: t["waypoints"] for t in self._d.get("trajectories", [])}
+        lights = {lc["drone_id"]: lc["keyframes"] for lc in self._d.get("light_cues", [])}
+        result = []
+        for i in range(self.drone_count):
+            result.append({
+                "waypoints": trajs.get(i, [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}]),
+                "lights": lights.get(i, [{"t": 0.0, "r": 255, "g": 255, "b": 255}]),
+            })
+        return result
+
+
+# ---------------------------------------------------------------------------
 # DroneSwarmSimulator
 # ---------------------------------------------------------------------------
 
@@ -260,7 +288,14 @@ class DroneSwarmSimulator:
             lights:    list[{t, r, g, b}]
 
         Returns True on success.
+
+        Also accepts the raw dict format produced by demo_generator.generate_demo_show():
+          {"metadata": {"drone_count": N, ...}, "trajectories": [...], "light_cues": [...]}
         """
+        # Normalise raw dict (from demo_generator) into ShowFile-compatible object
+        if isinstance(show_file, dict):
+            show_file = _DictShowFileAdapter(show_file)
+
         try:
             show_drone_count = int(show_file.drone_count)
 
@@ -707,6 +742,22 @@ class DroneSwarmSimulator:
 
     # ------------------------------------------------------------------
     # Telemetry & statistics
+    # ------------------------------------------------------------------
+    # Public read-only properties
+    # ------------------------------------------------------------------
+
+    @property
+    def show_loaded(self) -> bool:
+        return self._show_loaded
+
+    @property
+    def show_time(self) -> float:
+        return self._show_time
+
+    @property
+    def show_duration(self) -> float:
+        return self._show_duration
+
     # ------------------------------------------------------------------
 
     def get_telemetry(self) -> List[Dict]:

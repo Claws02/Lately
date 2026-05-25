@@ -68,6 +68,12 @@ class GeofenceZone:
     shape: ZoneShape = ZoneShape.CYLINDER
     label: str = ""
 
+    def __post_init__(self) -> None:
+        if isinstance(self.zone_type, str):
+            self.zone_type = ZoneType(self.zone_type.upper())
+        if isinstance(self.shape, str):
+            self.shape = ZoneShape(self.shape.upper())
+
     @property
     def center(self) -> np.ndarray:
         return np.array([self.center_x, self.center_y, self.center_z])
@@ -334,13 +340,10 @@ class GeofenceEngine:
 
             # Negative distance = inside boundary (for exclusion), outside safe
             if zone.zone_type == ZoneType.SAFE:
-                # Inside safe zone is good; outside is a violation
+                # Inside safe zone is good; outside is always a hard violation
                 outside = self._is_outside_safe(x, y, z, zone)
                 if outside:
-                    if zone.zone_type == ZoneType.HARD:
-                        result.violating_zone_ids.append(zone.zone_id)
-                    else:
-                        result.warning_zone_ids.append(zone.zone_id)
+                    result.violating_zone_ids.append(zone.zone_id)
             elif zone.zone_type in (ZoneType.HARD, ZoneType.WARN):
                 # Inside exclusion zone is a violation
                 inside = self._is_inside(x, y, z, zone)

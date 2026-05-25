@@ -16,10 +16,14 @@ import time
 from typing import Any, AsyncGenerator, Optional
 
 # ---------------------------------------------------------------------------
-# Path bootstrap – allow imports from project root and simulation package
+# Path bootstrap – allow imports from backend/ and project root
 # ---------------------------------------------------------------------------
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.abspath(os.path.join(_HERE, ".."))      # backend/
+_PROJECT_DIR = os.path.abspath(os.path.join(_HERE, "..", "..")) # Lately/
+for _p in (_BACKEND_DIR, _PROJECT_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from fastapi import (
     FastAPI,
