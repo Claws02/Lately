@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ../requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /app/backend
+COPY ../simulation /app/simulation
+
+ENV PYTHONPATH=/app:/app/backend/src:/app/simulation
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.src.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

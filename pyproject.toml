@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "nextgen-swarm-sim"
+version = "1.0.0"
+description = "Next-generation drone show simulator"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.5",
+    "uvicorn[standard]>=0.32.1",
+    "websockets>=13.1",
+    "numpy>=2.1.3",
+    "scipy>=1.14.1",
+    "pymavlink>=2.4.41",
+    "pydantic>=2.10.3",
+    "python-multipart>=0.0.18",
+    "aiofiles>=24.1.0",
+    "networkx>=3.4.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
